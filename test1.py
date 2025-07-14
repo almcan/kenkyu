@@ -1,18 +1,139 @@
-from mesa import Model
-from mesa.space import SingleGrid
+from mesa import Model, Agent
 from mesa.time import RandomActivation
+from mesa.datacollection import DataCollector
+from mesa.space import SingleGrid
+import random
+
+def compute_S(model):
+    return sum(1 for agent in model.schedule.agents if agent.state =="S")
+def compute_E(model):
+    return sum(1 for agent in model.schedule.agents if agent.state =="E")
+def compute_I(model):
+    return sum(1 for agent in model.schedule.agents if agent.state =="I")
+def compute_C(model):
+    return sum(1 for agent in model.schedule.agents if agent.state =="C")
+def compute_R(model):
+    return sum(1 for agent in model.schedule.agents if agent.state =="R")
+
+class SmartPhoneAgent(Agent):
+    """
+    スマートフォンエージェントのクラス
+    """
+    def __init__(self, unique_id, model, android_share):
+        super().__init__(unique_id, model)
+        self.state = "S"  # 状態を初期化
+        self.os = "Android" if self.random.random() < android_share else "Other"
+        self.latency_timer = 0
+
+    def move(self):
+        """
+        エージェントの移動メソッド
+        """
+        possible_steps = self.model.grid.get_neighborhood(
+            self.pos,
+            moore=True,
+            include_center=False
+        )
+        empty_steps = [p for p in possible_steps if self.model.grid.is_cell_empty(p)]
+
+        if len(empty_steps) > 0:
+            new_position = self.random.choice(empty_steps)
+            self.model.grid.move_agent(self, new_position)
+
+    def update_state(self):
+        """
+        エージェントの状態を更新するメソッド
+        """
+        #回復状態に遷移する条件を追加
+        if self.state == "I":
+            if self.random.random() < self.model.recover_rate:
+                self.state = "R"
+            return
+        
+        #E状態に遷移する条件を追加
+        if self.state == "E":
+            self.latency_timer -= 1
+            if self.latency_timer <=0:
+                if self.os == "Android":
+                    self.state = "I"
+                else:
+                    self.state = "C"
+            return
+
+        #自分がS状態でない場合は何もしない
+        if self.state != "S":
+            return
+        #周囲のエージェントを取得
+        neighbors = self.model.grid.get_neighbors(
+            self.pos,
+            moore = True,
+            include_center=False
+        )
+        #周囲にいるI状態のエージェントがいるか確認
+        infected_neighbors = [agent for agent in neighbors if agent.state == "I"]
+        if len(infected_neighbors) > 0:
+            if self.random.random() < self.model.infection_rate:
+                self.state = "E"
+                self.latency_timer = self.model.latency_time
+            
+
+    def step(self):
+        self.move()
+        self.update_state()
+
 
 class BlueToothWormModel(Model):
     """
     BlueToothワームの拡散モデル
     """
-    def __init__(self, width=100, height=100):
+    def __init__(self, num_agents=100, width=100, height=100, android_share=0.84, infection_rate=0.9,initial_infected=1, latency_time=5,recover_rate=0.05):
         super().__init__()
+        self.num_agents = num_agents
+        self.android_share = android_share
+        self.infection_rate = infection_rate
+        self.latency_time = latency_time
+        self.recover_rate = recover_rate
         self.grid = SingleGrid(width, height, torus=True)
         self.schedule = RandomActivation(self)
 
+        self.datacollector = DataCollector(
+            model_reporters={
+                "S": compute_S,
+                "E": compute_E,
+                "I": compute_I,
+                "C": compute_C,
+                "R": compute_R
+            }
+        )
+
+        for i in range(self.num_agents):
+            a = SmartPhoneAgent(i, self, self.android_share)
+            self.schedule.add(a)
+            pos = self.random.choice(list(self.grid.empties))
+            self.grid.place_agent(a, pos)
+        
+        #初期感染者の設定
+        infected_agents = self.random.sample(self.schedule.agents, initial_infected)
+        for agent in infected_agents:
+            agent.state = "I"
+    
+
+    def step(self):
+        """
+        モデルのステップを実行するメソッド
+        """
+        self.datacollector.collect(self)
+        self.schedule.step()
+
+
 # モデルの実行
 if __name__ == "__main__":
-    model = BlueToothWormModel(width=100, height=100)
-    print("モデルの作成に成功しました。")
-    print(f"グリッドの幅: {model.grid.width}, グリッドの高さ: {model.grid.height}")
+    model = BlueToothWormModel(num_agents=2000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=10, latency_time=5)
+    for i in range(100):
+        model.step()
+
+    results = model.datacollector.get_model_vars_dataframe()
+    print("シミュレーション結果（最初の5ステップ）:")
+    print(results.head())
+    print("\nシミュレーション結果（最後の5ステップ）:")
+    print(results.tail())
