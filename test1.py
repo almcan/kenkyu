@@ -3,6 +3,7 @@ from mesa.time import RandomActivation
 from mesa.datacollection import DataCollector
 from mesa.space import SingleGrid
 import random
+import matplotlib.pyplot as plt
 
 def compute_S(model):
     return sum(1 for agent in model.schedule.agents if agent.state =="S")
@@ -129,11 +130,12 @@ class BlueToothWormModel(Model):
 # モデルの実行
 if __name__ == "__main__":
     model = BlueToothWormModel(num_agents=2000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=10, latency_time=5)
-    for i in range(100):
+    for i in range(200):
         model.step()
 
     results = model.datacollector.get_model_vars_dataframe()
-    print("シミュレーション結果（最初の5ステップ）:")
-    print(results.head())
-    print("\nシミュレーション結果（最後の5ステップ）:")
-    print(results.tail())
+    results.plot()
+    plt.title("BlueTooth Worm Model Results")
+    plt.xlabel("Step")
+    plt.ylabel("Number of Agents")
+    plt.show()
