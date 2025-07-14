@@ -25,21 +25,50 @@ class SmartPhoneAgent(Agent):
         self.state = "S"  # 状態を初期化
         self.os = "Android" if self.random.random() < android_share else "Other"
         self.latency_timer = 0
+        self.direction = self.random.choice([(0,1),(1,0),(0,-1),(-1,0),(1,1),(-1,1),(1,-1),(-1,-1)])
+        self.movement_mode = None  # 移動モードを初期化
+        self.movement_timer = 0  # 移動タイマーを初期化
 
     def move(self):
         """
         エージェントの移動メソッド
         """
-        possible_steps = self.model.grid.get_neighborhood(
-            self.pos,
-            moore=True,
-            include_center=False
-        )
-        empty_steps = [p for p in possible_steps if self.model.grid.is_cell_empty(p)]
+        # エージェントの移動方法を選択
+        if self.movement_timer <= 0:
+            self.movement_mode = self.random.choice(["RW", "SL","PAUSE"])
+            # RW: ランダムウォーク, SL: ステップランダムウォーク, PAUSE: 停止
+            self.movement_timer = self.random.randint(1, 5)
+            if self.movement_mode =="SL":
+                self.direction = self.random.choice([(0,1),(1,0),(0,-1),(-1,0),(1,1),(-1,1),(1,-1),(-1,-1)])
+        
+        # RWの実装
+        if self.movement_mode == "RW":
+            possible_steps = self.model.grid.get_neighborhood(
+                self.pos,
+                moore=True,
+                include_center=False
+            )
+            empty_steps = [p for p in possible_steps if self.model.grid.is_cell_empty(p)]
 
-        if len(empty_steps) > 0:
-            new_position = self.random.choice(empty_steps)
-            self.model.grid.move_agent(self, new_position)
+            if len(empty_steps) > 0:
+                new_position = self.random.choice(empty_steps)
+                self.model.grid.move_agent(self, new_position)
+
+        #SLの実装
+        elif self.movement_mode == "SL":
+            next_pos = (self.pos[0] + self.direction[0], self.pos[1] + self.direction[1])
+            if not self.model.grid.out_of_bounds(next_pos) and self.model.grid.is_cell_empty(next_pos):
+                self.model.grid.move_agent(self, next_pos)
+            # else:
+            #     # 移動できない場合はランダムに方向を変える
+            #     self.direction = self.random.choice([(0,1),(1,0),(0,-1),(-1,0),(1,1),(-1,1),(1,-1),(-1,-1)])
+            
+        # PAUSEの実装
+        elif self.movement_mode == "PAUSE":
+            # 停止状態では何もしない
+            pass
+        # タイマーをデクリメント
+        self.movement_timer -= 1
 
     def update_state(self):
         """
@@ -96,6 +125,7 @@ class BlueToothWormModel(Model):
         self.recover_rate = recover_rate
         self.grid = SingleGrid(width, height, torus=True)
         self.schedule = RandomActivation(self)
+        self.initial_infected_positions = []
 
         self.datacollector = DataCollector(
             model_reporters={
@@ -117,6 +147,7 @@ class BlueToothWormModel(Model):
         infected_agents = self.random.sample(self.schedule.agents, initial_infected)
         for agent in infected_agents:
             agent.state = "I"
+            self.initial_infected_positions.append(agent.pos)
     
 
     def step(self):
@@ -129,8 +160,10 @@ class BlueToothWormModel(Model):
 
 # モデルの実行
 if __name__ == "__main__":
-    model = BlueToothWormModel(num_agents=2000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=10, latency_time=5)
-    for i in range(200):
+    simulation_steps = 400
+    model = BlueToothWormModel(num_agents=2000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=1, latency_time=5)
+    print(f"初期感染者の位置: {model.initial_infected_positions}")
+    for i in range(simulation_steps):
         model.step()
 
     results = model.datacollector.get_model_vars_dataframe()
@@ -138,4 +171,6 @@ if __name__ == "__main__":
     plt.title("BlueTooth Worm Model Results")
     plt.xlabel("Step")
     plt.ylabel("Number of Agents")
+    plt.xlim(0, simulation_steps)
+    plt.grid(True)
     plt.show()
