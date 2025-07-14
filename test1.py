@@ -77,6 +77,11 @@ class SmartPhoneAgent(Agent):
         """
         エージェントの状態を更新するメソッド
         """
+        if self.state == "R":
+            if self.random.random() < self.model.renewal_rate:
+                self.state = "S"
+            return
+        
         if self.state == "INT":
             self.state = "S"
             return
@@ -131,13 +136,14 @@ class BlueToothWormModel(Model):
     """
     BlueToothワームの拡散モデル
     """
-    def __init__(self, num_agents=100, width=100, height=100, android_share=0.84, infection_rate=0.9,initial_infected=1, latency_time=5,recover_rate=0.05):
+    def __init__(self, num_agents=100, width=100, height=100, android_share=0.84, infection_rate=0.9,initial_infected=1, latency_time=5,recover_rate=0.05,renewal_rate=0.01):
         super().__init__()
         self.num_agents = num_agents
         self.android_share = android_share
         self.infection_rate = infection_rate
         self.latency_time = latency_time
         self.recover_rate = recover_rate
+        self.renewal_rate = renewal_rate
         self.grid = SingleGrid(width, height, torus=True)
         self.schedule = RandomActivation(self)
         self.initial_infected_positions = []
@@ -177,7 +183,7 @@ class BlueToothWormModel(Model):
 # モデルの実行
 if __name__ == "__main__":
     simulation_steps = 400
-    model = BlueToothWormModel(num_agents=2000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=100, latency_time=5)
+    model = BlueToothWormModel(num_agents=9000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=100, latency_time=5)
     print(f"初期感染者の位置: {model.initial_infected_positions}")
     for i in range(simulation_steps):
         model.step()
