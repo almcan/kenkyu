@@ -15,6 +15,8 @@ def compute_C(model):
     return sum(1 for agent in model.schedule.agents if agent.state =="C")
 def compute_R(model):
     return sum(1 for agent in model.schedule.agents if agent.state =="R")
+def compute_INT(model):
+    return sum(1 for agent in model.schedule.agents if agent.state =="INT")
 
 class SmartPhoneAgent(Agent):
     """
@@ -28,6 +30,7 @@ class SmartPhoneAgent(Agent):
         self.direction = self.random.choice([(0,1),(1,0),(0,-1),(-1,0),(1,1),(-1,1),(1,-1),(-1,-1)])
         self.movement_mode = None  # 移動モードを初期化
         self.movement_timer = 0  # 移動タイマーを初期化
+        self.infecting_agent = None  # 感染エージェントを初期化
 
     def move(self):
         """
@@ -74,6 +77,10 @@ class SmartPhoneAgent(Agent):
         """
         エージェントの状態を更新するメソッド
         """
+        if self.state == "INT":
+            self.state = "S"
+            return
+        
         #回復状態に遷移する条件を追加
         if self.state == "I":
             if self.random.random() < self.model.recover_rate:
@@ -82,29 +89,37 @@ class SmartPhoneAgent(Agent):
         
         #E状態に遷移する条件を追加
         if self.state == "E":
-            self.latency_timer -= 1
-            if self.latency_timer <=0:
-                if self.os == "Android":
-                    self.state = "I"
-                else:
-                    self.state = "C"
+            is_still_valid = False
+            if self.infecting_agent is not None:
+                neighbor_cells = self.model.grid.get_neighborhood(self.pos, moore=True)
+                neighbors = self.model.grid.get_cell_list_contents(neighbor_cells)
+                if self.infecting_agent in neighbors and self.infecting_agent.state == "I":
+                    is_still_valid = True
+            if is_still_valid:
+                self.latency_timer -= 1
+                if self.latency_timer <=0:
+                    if self.os == "Android": self.state = "I"
+                    else: self.state = "C"
+                    self.infecting_agent = None
+            else:
+                self.state = "INT"
+                self.infecting_agent = None
             return
 
         #自分がS状態でない場合は何もしない
         if self.state != "S":
             return
         #周囲のエージェントを取得
-        neighbors = self.model.grid.get_neighbors(
-            self.pos,
-            moore = True,
-            include_center=False
-        )
+        neighbor_cells = self.model.grid.get_neighborhood(self.pos, moore=True, include_center=False)
+        neighbors = self.model.grid.get_cell_list_contents(neighbor_cells)
+
         #周囲にいるI状態のエージェントがいるか確認
         infected_neighbors = [agent for agent in neighbors if agent.state == "I"]
         if len(infected_neighbors) > 0:
             if self.random.random() < self.model.infection_rate:
                 self.state = "E"
                 self.latency_timer = self.model.latency_time
+                self.infecting_agent = self.random.choice(infected_neighbors)
             
 
     def step(self):
@@ -133,7 +148,8 @@ class BlueToothWormModel(Model):
                 "E": compute_E,
                 "I": compute_I,
                 "C": compute_C,
-                "R": compute_R
+                "R": compute_R,
+                "INT": compute_INT
             }
         )
 
@@ -161,7 +177,7 @@ class BlueToothWormModel(Model):
 # モデルの実行
 if __name__ == "__main__":
     simulation_steps = 400
-    model = BlueToothWormModel(num_agents=2000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=1, latency_time=5)
+    model = BlueToothWormModel(num_agents=2000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=100, latency_time=5)
     print(f"初期感染者の位置: {model.initial_infected_positions}")
     for i in range(simulation_steps):
         model.step()
