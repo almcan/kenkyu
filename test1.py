@@ -86,13 +86,13 @@ class SmartPhoneAgent(Agent):
             self.state = "S"
             return
         
-        #回復状態に遷移する条件を追加
+        #回復状態に遷移する条件
         if self.state == "I":
             if self.random.random() < self.model.recover_rate:
                 self.state = "R"
             return
         
-        #E状態に遷移する条件を追加
+        #E状態に遷移する条件
         if self.state == "E":
             is_still_valid = False
             if self.infecting_agent is not None:
@@ -182,17 +182,18 @@ class BlueToothWormModel(Model):
 
 # モデルの実行
 if __name__ == "__main__":
-    simulation_steps = 400
-    model = BlueToothWormModel(num_agents=9000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=100, latency_time=5)
+    simulation_steps = 800
+    model = BlueToothWormModel(num_agents=9000, width=100, height=100, android_share=0.84, infection_rate=0.9, initial_infected=1, latency_time=5, recover_rate=0.01, renewal_rate=0.01)
     print(f"初期感染者の位置: {model.initial_infected_positions}")
     for i in range(simulation_steps):
         model.step()
 
     results = model.datacollector.get_model_vars_dataframe()
     results.plot()
-    plt.title("BlueTooth Worm Model Results")
+    plt.title("Bluetooth Worm Model Results")
     plt.xlabel("Step")
     plt.ylabel("Number of Agents")
     plt.xlim(0, simulation_steps)
     plt.grid(True)
-    plt.show()
+    plt.savefig('test1_plot.png')
+    plt.close()
